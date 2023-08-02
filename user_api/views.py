@@ -11,10 +11,16 @@ import pdb
 
 class UserListAndCreate(APIView):
     def get(self, request):
+        """
+            returns a list of all users
+        """
         users = User.objects.all()
         serializer = UserSerializer(users, many=True)
         return Response(serializer.data, status=status.HTTP_200_OK)
     def post(self, request):
+        """
+            creates a new user
+        """
         serializer = UserSerializer(data=request.data)
         if serializer.is_valid():
             serializer.save()
@@ -23,6 +29,9 @@ class UserListAndCreate(APIView):
 
 class UserDetailsAndUpdate(APIView):
     def get(self, request, id):
+        """
+            gets the user with the id specified in the url i.e. 'api/url/id'
+        """
         try:
             user = User.objects.get(pk=id)
             serializer = UserSerializer(user)
@@ -30,6 +39,17 @@ class UserDetailsAndUpdate(APIView):
         except User.DoesNotExist:
             return Response({"error": "User not found."}, status=status.HTTP_404_NOT_FOUND)
     def patch(self, request, id):
+        
+        """
+            updates the user with the id specified in the url i.e. 'api/url/id
+            request is received as JSON in the format:
+                {
+                    ...
+                    "username": "", 
+                    "first_name": ""
+                    ...
+                } 
+        """
         try:
             user = User.objects.get(pk=id)
         except user.DoesNotExist:
@@ -42,6 +62,9 @@ class UserDetailsAndUpdate(APIView):
             return Response(serializer.data, status=status.HTTP_200_OK)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
     def delete(self, request, id):
+        """
+            deletes the user with the id specified in the url i.e. 'api/url/id
+        """
         try:
             user = User.objects.get(pk=id)
             user.delete()
@@ -52,97 +75,171 @@ class UserDetailsAndUpdate(APIView):
 
 class MultipleUsersUpdate(APIView):
     def post(self, request):
+        """
+        creates multiple users
+        request is received as JSON in the format:
+            {
+                "data":
+                    {
+                        "username": "", 
+                        "first_name": "",
+                        "last_name": "",
+                        "email"
+                    },
+                    {
+                        "username": "", 
+                        "first_name": "",
+                        "last_name": "",
+                        "email"
+                    }
+                    ...
+            }
+        """
         data = request.data.get('data', [])
 
         users_to_create = []
+        response = {'users_created': [], 'users_not_created': []}
         for user_data in data:
             serializer = UserSerializer(data=user_data)
-            pdb.set_trace()
             if serializer.is_valid():
                 users_to_create.append(serializer.save())
             else:
-                return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-
-        return Response(UserSerializer(users_to_create, many=True).data, status=status.HTTP_201_CREATED)
+                response.get('users_not_created').append({"users_data": user_data, "error": serializer.errors})
+        response.get("users_created").append(UserSerializer(users_to_create, many=True).data)
+        return Response(response, status=status.HTTP_200_OK)
     def patch(self, request):
+        """
+        updates multiple users
+        request is received as JSON in the format:
+            {
+                "data":
+                    {
+                        ...
+                        "first_name": "",
+                        "last_name": "",
+                        ...
+                    },
+                    {
+                        ...
+                        "first_name": "",
+                        "last_name": "",
+                        ...
+                    }
+                    ...
+            }
+        """
         data = request.data.get('data', [])
 
-        updated_users = []
+        response = {'users_updated': [], 'users_not_updated': []}
         for user_data in data:
             user_id = user_data.get('id', None)
             if user_id is None:
-                return Response({"error": "User ID not provided."}, status=status.HTTP_400_BAD_REQUEST)
+                response.get('users_not_updated').append({"users_id": user_id, "error": "User ID not provided."})
             try:
                 user = User.objects.get(pk=user_id)
             except User.DoesNotExist:
-                return Response({"error": f"User with ID {user_id} not found."}, status=status.HTTP_404_NOT_FOUND)
+                response.get('users_not_updated').append({"users_id": user_id, "error": "User not found."})
+                continue
 
             serializer = UserSerializer(user, data=user_data, partial=True)
             if not serializer.is_valid():
-                return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+                response.get('users_not_updated').append({"users_id": user_id, "error": "User not found."})
 
             serializer.save()
-            updated_users.append(serializer.data)
-        return Response(updated_users, status=status.HTTP_200_OK)
+            response.get('users_updated').append(serializer.data)
+        return Response(response, status=status.HTTP_200_OK)
     def delete(self, request):
+        """
+        deletes multiple users
+        request is received as JSON in the format:
+            {
+                "data": ["1", "2", "3",...]
+            }
+        """
         data = request.data.get('data', [])
-
-        deleted_user_ids = []
-        for user_data in data:
-            user_id = user_data.get('id', None)
+        response = []
+        for user_id in data:
             if user_id is None:
-                return Response({"error": "User ID not provided."}, status=status.HTTP_400_BAD_REQUEST)
-
+                response.append({"id": user_id, "error": "User ID not provided."})
             try:
                 user = User.objects.get(pk=user_id)
                 user.delete()
-                deleted_user_ids.append(user_id)
+                response.append({"id": user_id, "status": "User deleted."})
             except User.DoesNotExist:
-                return Response({"error": f"User with ID {user_id} not found."}, status=status.HTTP_404_NOT_FOUND)
+                response.append({"id": user_id, "error": f"User with ID {user_id} not found."})
 
-        return Response({"deleted_user_ids": deleted_user_ids}, status=status.HTTP_200_OK)
+        return Response(response, status=status.HTTP_200_OK)
 
 class MultipleUsersCreateUpdateAndDelete(APIView):
+    """
+        creates, updates and deletes multiple users
+        request is received as JSON in the format:
+            {
+                "data":
+                    [
+                        {
+                            "id": ""
+                        },
+                        {
+                            ...
+                            "id": "",
+                            "first_name": "",
+                            ...
+                        },
+                        {
+                            "first_name": "",
+                            "last_name": "",
+                            "username": "",
+                            "email": ""
+                        }
+                    ]
+            }
+    """
     def post(self, request):
         data = request.data.get('data', [])
-
-        created_users = []
-        updated_users = []
-        deleted_user_ids = []
-
+        create_response = {'users_created': [], 'users_not_created': []}
+        update_response = {'users_updated': [], 'users_not_updated': []}
+        delete_response = []
         for user_data in data:
             if user_id := user_data.get('id', None):
                 if len(user_data) == 1:
-                    # It's a delete request
+                    if user_id is None:
+                        delete_response.append({"id": user_id, "error": "User ID not provided."})
                     try:
                         user = User.objects.get(pk=user_id)
                         user.delete()
-                        deleted_user_ids.append(user_id)
+                        delete_response.append({"id": user_id, "status": "User deleted."})
                     except User.DoesNotExist:
-                        return Response({"error": f"User with ID {user_id} not found."}, status=status.HTTP_404_NOT_FOUND)
+                        delete_response.append({"id": user_id, "error": f"User with ID {user_id} not found."})
                 else:
-                    # It's an update request
+                    user_id = user_data.get('id', None)
+                    if user_id is None:
+                        update_response.get('users_not_updated').append({"users_id": user_id, "error": "User ID not provided."})
                     try:
                         user = User.objects.get(pk=user_id)
-                        serializer = UserSerializer(user, data=user_data, partial=True)
-                        if not serializer.is_valid():
-                            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-                        serializer.save()
-                        updated_users.append(serializer.data)
                     except User.DoesNotExist:
-                        return Response({"error": f"User with ID {user_id} not found."}, status=status.HTTP_404_NOT_FOUND)
+                        update_response.get('users_not_updated').append({"users_id": user_id, "error": "User not found."})
+                        continue
+
+                    serializer = UserSerializer(user, data=user_data, partial=True)
+                    if not serializer.is_valid():
+                        update_response.get('users_not_updated').append({"users_id": user_id, "error": "User not found."})
+
+                    serializer.save()
+                    update_response.get('users_updated').append(serializer.data)
             else:
-                # It's a create request
+                users_to_create = []
                 serializer = UserSerializer(data=user_data)
-                if not serializer.is_valid():
-                    return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+                if serializer.is_valid():
+                    users_to_create.append(serializer.save())
+                else:
+                    create_response.get('users_not_created').append({"users_data": user_data, "error": serializer.errors})
+                create_response.get("users_created").append(UserSerializer(users_to_create, many=True).data)
+        response = [
+            create_response, 
+            update_response, 
+            delete_response
+        ]
+        
 
-                serializer.save()
-                created_users.append(serializer.data)
-        response_data = {
-            "created_users": created_users,
-            "updated_users": updated_users,
-            "deleted_user_ids": deleted_user_ids,
-        }
-
-        return Response(response_data, status=status.HTTP_200_OK)
+        return Response(response, status=status.HTTP_200_OK)
