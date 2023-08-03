@@ -52,7 +52,7 @@ class UserDetailsAndUpdate(APIView):
         """
         try:
             user = User.objects.get(pk=id)
-        except user.DoesNotExist:
+        except Exception:
             return Response({"error": "Object not found."}, status=status.HTTP_404_NOT_FOUND)
 
         serializer = UserSerializer(user, data=request.data, partial=True)
@@ -98,14 +98,14 @@ class MultipleUsersUpdate(APIView):
         data = request.data.get('data', [])
 
         users_to_create = []
-        response = {'users_created': [], 'users_not_created': []}
+        response = {'users_not_created': []}
         for user_data in data:
             serializer = UserSerializer(data=user_data)
             if serializer.is_valid():
                 users_to_create.append(serializer.save())
             else:
                 response.get('users_not_created').append({"users_data": user_data, "error": serializer.errors})
-        response.get("users_created").append(UserSerializer(users_to_create, many=True).data)
+        response["users_created"]=UserSerializer(users_to_create, many=True).data
         return Response(response, status=status.HTTP_200_OK)
     def patch(self, request):
         """
